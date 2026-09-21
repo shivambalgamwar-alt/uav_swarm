@@ -25,6 +25,10 @@ print("Route D3 -> GS:", nx.shortest_path(G, "D3", "GS"))
 G.remove_node("D2")  # simulate a drone failure
 print("Still connected?", nx.has_path(G, "D3", "GS"))
 
+
+
+
+## Basic Math module method
 # import math
 
 # RADIO_RANGE = 40
