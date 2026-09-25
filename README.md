@@ -3,7 +3,7 @@
 A small UAV swarm project. It explores two ideas:
 
 1. **`explore.py`** – a static experiment that shows how drones with a limited radio range form a network, how a far-away drone reaches the ground station through relay drones (multi-hop), and what happens when one drone fails.
-2. **`main.py` + `swarm/`** – a moving simulation where drones fly along waypoint paths inside a bounded world and are animated with matplotlib.
+2. **`main.py` + `swarm/`** – a moving simulation where drones fly along waypoint paths inside a bounded world, form radio links as they move, and are animated with matplotlib.
 
 ---
 
@@ -75,7 +75,7 @@ Still connected? False
 
 ## Part 2: Moving Swarm Simulation (`main.py` + `swarm/`)
 
-The static experiment turns into a live simulation. Drones are now objects that move along waypoint paths, and a `World` keeps track of everything inside a bounded area.
+The static experiment turns into a live simulation. Drones are now objects that move along waypoint paths, a `World` keeps track of everything inside a bounded area, and `swarm/radio.py` rebuilds the radio network from live positions every frame — so links form and break as drones fly, and the multi-hop route to the ground station is recomputed each frame.
 
 ### Project Structure
 
@@ -85,7 +85,8 @@ The static experiment turns into a live simulation. Drones are now objects that 
 └── swarm/
     ├── __init__.py
     ├── drone.py      # the Drone class
-    └── world.py      # the World class
+    ├── world.py      # the World class
+    └── radio.py      # radio-range network graph + routing helpers
 ```
 
 ### The `Drone` class (`swarm/drone.py`)
@@ -113,6 +114,19 @@ The container for the simulation.
 | `alive_drones()` | Returns the list of drones that are still alive |
 | `step()` | Advances every alive drone one step and increments `world.time` |
 
+### The `radio` module (`swarm/radio.py`)
+
+Brings the Part 1 graph logic into the simulation, using live drone positions.
+
+| Function / constant | What it does |
+|---|---|
+| `RADIO_RANGE = 40` | Module-level constant: max distance (metres) at which two nodes can talk |
+| `distance(pos_a, pos_b)` | Euclidean distance between two `(x, y)` positions |
+| `build_network_graph(world)` | Builds a `networkx` graph of the ground station + all alive drones, with an edge wherever a pair is within `RADIO_RANGE` (edge weight = actual distance) |
+| `route_to_ground_station(G, drone_id)` | Shortest multi-hop path from `drone_id` to `GS`, or `None` if unreachable |
+
+Dead drones are excluded automatically, because `build_network_graph` only reads `world.alive_drones()`.
+
 ### Setting Up a Scenario (`main.py`)
 
 Open `main.py` and change:
@@ -123,21 +137,25 @@ Open `main.py` and change:
 | `Drone("D1", x=..., y=...)` | `main.py` | Drone's name and starting position |
 | `d1.set_path([...])` | `main.py` | Waypoints the drone flies through |
 | `world.add_drone(d1)` | `main.py` | Registers the drone in the world |
+| `RADIO_RANGE` | `swarm/radio.py` | How far apart nodes can be and still be linked |
 
-By default the ground station sits at `(0, 0)`, three drones fly small loops, and the animation is refreshed every 100 ms.
+By default the ground station sits at `(0, 0)` in a 120 × 60 world, three drones fly small loops, and the animation is refreshed every 200 ms.
 
 ### How It Works
 
 1. Main creates a `World` and the drones.
 2. Each drone gets a path of waypoints and moves one step per frame.
 3. Every frame, `world.step()` advances the drones and the scatter plot + labels are refreshed.
+4. Every frame, `build_network_graph(world)` rebuilds the radio graph from current positions and draws each link as a green line.
+5. Every frame, `route_to_ground_station(G, "D3")` recomputes the multi-hop route and prints it (or `NO ROUTE`) to the console, so you can watch connectivity appear and disappear live.
 
 ### Experiments to Try
 
 1. Add more waypoints to a drone's `set_path(...)` to make it fly a different shape.
 2. Change `world.step()` usage to run a headless simulation (no matplotlib) by calling it in a loop and printing `drone.position()`.
-3. Call `d.kill()` on a drone mid-simulation to see how `alive_drones()` filters it out.
+3. Call `d.kill()` on a drone mid-simulation — it disappears from the graph and the route may break.
 4. Add more drones with `world.add_drone(...)` and watch them all move together.
+5. Raise `RADIO_RANGE` in `swarm/radio.py` to 80 and watch the network stay connected; drop it to 30 and watch links vanish.
 
 ---
 
@@ -177,13 +195,14 @@ python main.py
 |---|---|
 | Graph of in-range links | Multi-hop aerial network |
 | Route through relay drones | Maintaining communication beyond line of sight |
-| Removing a node | Handling UAV failure |
+| Removing a node / killing a drone | Handling UAV failure |
 | No path to the ground station | Handling communication outage |
 | Moving drones along paths | Simulating an active flying swarm |
+| Links rebuilt from live positions each frame | Network reconfiguration as the swarm moves |
 
 ## Next Steps
 
 - Detect failures through missed heartbeats instead of deleting a node by hand.
 - Move a spare drone into the gap so the network reconnects (reconfiguration).
-- Add radio-range checks to the moving simulation so links form and break as drones fly.
-- Combine both parts: run the multi-hop routing on the live drone positions.
+- Visualise the route itself (highlight the edges on the current path to GS), not just all links.
+- Plot the graph dynamically over time, e.g. log link uptime or route changes.
