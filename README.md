@@ -10,7 +10,7 @@ Built for Techfest, IIT Bombay — Stage 1 submission.
 ## What This Demonstrates
 
 - **BVLOS survey** — drones autonomously fly lawnmower coverage patterns
-  over an assigned region, no manual control.
+  over an assigned region, with no manual control.
 - **Multi-hop aerial network** — drones relay data to the ground station
   through each other when direct range isn't possible.
 - **Failure detection** — a heartbeat/route-monitoring system detects
@@ -27,7 +27,7 @@ Built for Techfest, IIT Bombay — Stage 1 submission.
 
 ## Installation
 
-```bash
+\`\`\`bash
 git clone https://github.com/<your-username>/<repo-name>.git
 cd <repo-name>
 
@@ -39,47 +39,88 @@ venv\Scripts\activate
 source venv/bin/activate
 
 pip install -r requirements.txt
-```
+\`\`\`
 
 ## How to Run
 
-```bash
+\`\`\`bash
 python main.py
-```
+\`\`\`
 
 A window will open showing:
 - **Blue dots** — healthy drones flying their survey pattern
-- **Red dot** — a drone that has crashed (scripted failure at t=15)
+- **Red dot** — a drone that has crashed (scripted failure, default at t=15)
 - **Orange dot** — a drone that is alive but currently unreachable
   (network outage, not a crash)
 - **Green lines** — active radio links between drones/ground station
 - **Black square** — the ground station
 
-The console (and `simulation_log.txt`) will print, every step:
+The console (and `simulation_log.txt`) print, every step:
 - The current multi-hop route from the farthest drone to the ground
   station, or `NO ROUTE (disconnected)` if none exists
 - Failure/recovery events from the heartbeat monitor
 - Reassignment events when a failed drone's area is redistributed
 - Running coverage percentage
 
-The simulation stops automatically after 200 steps and prints a final
-summary with total coverage and which drones failed.
+The simulation stops automatically after `MAX_TIME` steps (default 200)
+and prints a final summary with total coverage and which drones failed.
 
 ## Project Structure
-uav-swarm/                      <- your repo root
-  main.py                       <- entry point, run this to start the simulation
+
+\`\`\`
+uav-swarm/
+  main.py               # entry point - sets up the world and runs the simulation
   requirements.txt
   README.md
-  simulation_log.txt            <- generated when you run main.py
-  swarm/                        <- your package folder
-    __init__.py                 <- empty file, makes it a package
-    world.py                    <- Phase 1
-    drone.py                    <- Phase 1
-    radio.py                    <- Phase 2
-    monitor.py                  <- Phase 3
-    planner.py                  <- Phase 4
-    coverage.py                 <- just added
-    logger.py                   <- just added
+  simulation_log.txt    # generated automatically when main.py runs
+  swarm/                # core package
+    __init__.py         # empty file, marks this folder as a Python package
+    world.py            # 2D environment, ground station, simulation clock
+    drone.py            # Drone class: position, movement, alive/failed status
+    radio.py            # radio range check, network graph, routing
+    monitor.py          # heartbeat-based failure detection
+    planner.py          # area partitioning, lawnmower coverage paths, reassignment
+    coverage.py         # tracks % of the area actually surveyed
+    logger.py           # writes all events to console + simulation_log.txt
   explore/
-    explore1_simple.py          <- your early learning experiment
-    README.md                   <- (or wherever you put the explore1 readme)
+    explore1_simple.py  # early learning experiment on radio range & multi-hop routing
+    README.md           # notes on the explore1 experiment
+\`\`\`
+
+## Configuration
+
+Key parameters, adjustable in the relevant files:
+
+| Parameter | File | Meaning |
+|---|---|---|
+| `RADIO_RANGE` | `swarm/radio.py` | Max distance (m) for two nodes to communicate |
+| `MISS_THRESHOLD` | `swarm/monitor.py` | Missed heartbeats before a drone is declared failed |
+| `FAILURE_TIME` | `main.py` | Simulation step at which the scripted failure occurs |
+| `MAX_TIME` | `main.py` | Total steps before the simulation stops and summarizes |
+| `cell_size` | `swarm/coverage.py` | Grid resolution for coverage tracking |
+
+## How the Simulation Maps to Real Hardware
+
+This simulation models the software logic that would run on a Raspberry
+Pi companion computer aboard each UAV, communicating with a flight
+controller (ArduPilot/PX4) over MAVLink. On real hardware:
+
+- `Drone.step()` would be replaced with MAVLink waypoint commands
+  (`pymavlink` / `MAVSDK-Python`).
+- The simulated radio range would be replaced by a real mesh network
+  (e.g. Wi-Fi ad-hoc with BATMAN-adv) or long-range telemetry radios.
+- Heartbeats would be actual MAVLink `HEARTBEAT` messages.
+- Position and battery would come from live `GLOBAL_POSITION_INT`
+  telemetry instead of simulated coordinates.
+
+Full details are in the accompanying technical proposal.
+
+## Known Limitations (Stage 1 scope)
+
+- 2D simulation only — no terrain or altitude modeling.
+- One scripted failure scenario is wired into `main.py`; additional
+  scenarios (relay failure, coordinator failure) are described in the
+  proposal as planned extensions.
+- No physical hardware integration yet — this is a software
+  proof-of-concept.
+
