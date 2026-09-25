@@ -6,6 +6,8 @@ from swarm.drone import Drone
 from swarm.radio import build_network_graph, route_to_ground_station
 from swarm.monitor import HeartbeatMonitor
 from swarm.planner import partition_area, lawnmower_path, remaining_region, split_region_between
+from swarm.coverage import CoverageTracker      # NEW
+from swarm.logger import SimLogger              # NEW
 
 # --- Set up the world ---
 world = World(width=120, height=60, ground_station=(0, 0))
@@ -18,7 +20,6 @@ world.add_drone(d1)
 world.add_drone(d2)
 world.add_drone(d3)
 
-# --- Area partitioning ---
 regions = partition_area(width=120, height=60, y_start=0, y_end=60,
                           drone_ids=["D1", "D2", "D3"])
 
@@ -26,12 +27,15 @@ for drone in world.drones:
     region = regions[drone.id]
     path = lawnmower_path(region, spacing=15)
     drone.set_path(path)
-    drone.region = region  # remember original assignment
+    drone.region = region
 
 monitor = HeartbeatMonitor()
+coverage = CoverageTracker(width=120, height=60, cell_size=5)   # NEW
+logger = SimLogger("simulation_log.txt")                        # NEW
 
 FAILURE_TIME = 15
 failure_triggered = False
+MAX_TIME = 200   # NEW: stop and print summary after this many steps
 
 # --- Visualization ---
 fig, ax = plt.subplots()
@@ -48,30 +52,37 @@ link_lines = []
 
 
 def reassign_failed_drone(failed_drone, world):
-    """Splits the failed drone's unfinished region among surviving drones."""
     leftover = remaining_region(failed_drone.region, failed_drone.x)
     survivors = world.alive_drones()
 
     if leftover is None or not survivors:
-        print(f"[t={world.time}] No leftover area to reassign (or no survivors).")
+        logger.log(f"[t={world.time}] No leftover area to reassign (or no survivors).")
         return
 
     sub_regions = split_region_between(leftover, len(survivors))
 
     for drone, sub_region in zip(survivors, sub_regions):
         extra_path = lawnmower_path(sub_region, spacing=15)
-        drone.path.extend(extra_path)  # append new waypoints to current path
-        print(f"[t={world.time}] REASSIGN: {drone.id} takes over region "
-              f"{tuple(round(v, 1) for v in sub_region)}")
+        drone.path.extend(extra_path)
+        logger.log(f"[t={world.time}] REASSIGN: {drone.id} takes over region "
+                    f"{tuple(round(v, 1) for v in sub_region)}")
 
 
 def update(frame):
     global link_lines, failure_triggered
 
+    if world.time >= MAX_TIME:
+        summary = (f"FINAL COVERAGE: {coverage.percent_covered():.1f}% | "
+                    f"Failed drones: {[d.id for d in world.drones if not d.alive]}")
+        logger.close(summary)
+        ani.event_source.stop()
+        return scat, *labels, *link_lines
+
     world.step()
+    coverage.update(world)   # NEW
 
     if world.time == FAILURE_TIME and not failure_triggered:
-        print(f"[t={world.time}] *** SCRIPTED FAILURE: D2 has crashed ***")
+        logger.log(f"[t={world.time}] *** SCRIPTED FAILURE: D2 has crashed ***")
         reassign_failed_drone(d2, world)
         d2.kill()
         failure_triggered = True
@@ -109,15 +120,17 @@ def update(frame):
 
     newly_declared, newly_recovered = monitor.update(world, G)
     for drone_id in newly_declared:
-        print(f"[t={world.time}] MONITOR: {drone_id} declared FAILED")
+        logger.log(f"[t={world.time}] MONITOR: {drone_id} declared FAILED")
     for drone_id in newly_recovered:
-        print(f"[t={world.time}] MONITOR: {drone_id} RECOVERED")
+        logger.log(f"[t={world.time}] MONITOR: {drone_id} RECOVERED")
 
     route = route_to_ground_station(G, "D3")
     if route:
-        print(f"[t={world.time}] D3 -> GS route: {route}")
+        logger.log(f"[t={world.time}] D3 -> GS route: {route} | "
+                    f"Coverage: {coverage.percent_covered():.1f}%")
     else:
-        print(f"[t={world.time}] D3 -> GS: NO ROUTE (disconnected)")
+        logger.log(f"[t={world.time}] D3 -> GS: NO ROUTE (disconnected) | "
+                    f"Coverage: {coverage.percent_covered():.1f}%")
 
     return scat, *labels, *link_lines
 
