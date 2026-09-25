@@ -66,3 +66,20 @@ The simulation stops automatically after 200 steps and prints a final
 summary with total coverage and which drones failed.
 
 ## Project Structure
+uav-swarm/                      <- your repo root
+  main.py                       <- entry point, run this to start the simulation
+  requirements.txt
+  README.md
+  simulation_log.txt            <- generated when you run main.py
+  swarm/                        <- your package folder
+    __init__.py                 <- empty file, makes it a package
+    world.py                    <- Phase 1
+    drone.py                    <- Phase 1
+    radio.py                    <- Phase 2
+    monitor.py                  <- Phase 3
+    planner.py                  <- Phase 4
+    coverage.py                 <- just added
+    logger.py                   <- just added
+  explore/
+    explore1_simple.py          <- your early learning experiment
+    README.md                   <- (or wherever you put the explore1 readme)
